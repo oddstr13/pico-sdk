@@ -11,6 +11,11 @@
 #include "hardware/regs/addressmap.h"
 #include "hardware/regs/sio.h"
 #include "pico/binary_info/defs.h"
+#include "hardware/regs/rosc.h"
+#include "hardware/regs/pads_bank0.h"
+#include "hardware/regs/io_bank0.h"
+#include "hardware/regs/psm.h"
+#include "hardware/regs/resets.h"
 
 #ifdef NDEBUG
 #ifndef COLLAPSE_IRQS
@@ -225,6 +230,63 @@ _reset_handler:
     cmp r0, #0
     bne hold_non_core0_in_bootrom
 
+    // Increase ROSC frequency to ~48MHz (range 14.4 - 96)
+    // Startup drops from ~160ms to ~32ms on Pico W MicroPython
+    ldr r0, =(ROSC_BASE + ROSC_DIV_OFFSET)
+    ldr r1, =0xaa2
+    str r1, [r0]
+
+
+    // Enable SIO PSM
+    ldr r0, =(PSM_BASE + PSM_FRCE_ON_OFFSET)
+    ldr r1, =(PSM_FRCE_ON_SIO_BITS)
+    str r1, [r0]
+    ldr r0, =(PSM_BASE + PSM_DONE_OFFSET)
+sio_power_loop:
+    ldr r2, [r0]
+    ands r2, r2, r1
+    cmp r1, r2
+    bne sio_power_loop
+
+
+    // Disable reset on SIO
+    ldr r0, =(RESETS_BASE + RESETS_RESET_OFFSET)
+    ldr r1, =(RESETS_RESET_PADS_BANK0_BITS & RESETS_RESET_IO_BANK0_BITS)
+    ldr r2, [r0]
+    bics r2, r2, r1
+    str r2, [r0]
+    ldr r0, =(RESETS_BASE + RESETS_RESET_DONE_OFFSET)
+sio_reset_loop:
+    ldr r2, [r0]
+    ands r2, r2, r1
+    cmp r1, r2
+    bne sio_reset_loop
+
+
+    // gpio_init(0)
+    ldr r0, =(PADS_BANK0_BASE + PADS_BANK0_GPIO0_OFFSET)
+    ldr r1, [r0]
+    ldr r2, =(PADS_BANK0_GPIO0_OD_BITS)
+    bics r1, r1, r2 // Clear output disable
+    ldr r2, =(PADS_BANK0_GPIO0_IE_BITS)
+    orrs r1, r1, r2
+    str r1, [r0]
+
+    ldr r0, =(IO_BANK0_BASE + IO_BANK0_GPIO0_CTRL_OFFSET)
+    ldr r1, =(0x05) // SIO
+    str r1, [r0]
+
+    // pinMode(0, OUTPUT)
+    ldr r0, =(SIO_BASE + SIO_GPIO_OE_SET_OFFSET)
+    ldr r1, =(1<<0) // Pin 0
+    str r1, [r0]
+
+    // digitalWrite(0, HIGH)
+    ldr r0, =(SIO_BASE + SIO_GPIO_OUT_SET_OFFSET)
+    ldr r1, =(1<<0) // Pin 0
+    str r1, [r0]
+
+
     // In a NO_FLASH binary, don't perform .data copy, since it's loaded
     // in-place by the SRAM load. Still need to clear .bss
 #if !PICO_NO_FLASH
@@ -250,6 +312,29 @@ bss_fill_loop:
 bss_fill_test:
     cmp r1, r2
     bne bss_fill_loop
+
+    // gpio_init(1)
+    ldr r0, =(PADS_BANK0_BASE + PADS_BANK0_GPIO1_OFFSET)
+    ldr r1, [r0]
+    ldr r2, =(PADS_BANK0_GPIO1_OD_BITS)
+    bics r1, r1, r2 // Clear output disable
+    ldr r2, =(PADS_BANK0_GPIO1_IE_BITS)
+    orrs r1, r1, r2
+    str r1, [r0]
+
+    ldr r0, =(IO_BANK0_BASE + IO_BANK0_GPIO1_CTRL_OFFSET)
+    ldr r1, =(0x05) // SIO
+    str r1, [r0]
+
+    // pinMode(1, OUTPUT)
+    ldr r0, =(SIO_BASE + SIO_GPIO_OE_SET_OFFSET)
+    ldr r1, =(1<<1) // Pin 1
+    str r1, [r0]
+
+    // digitalWrite(1, HIGH)
+    ldr r0, =(SIO_BASE + SIO_GPIO_OUT_SET_OFFSET)
+    ldr r1, =(1<<1) // Pin 1
+    str r1, [r0]
 
 platform_entry: // symbol for stack traces
     // Use 32-bit jumps, in case these symbols are moved out of branch range
