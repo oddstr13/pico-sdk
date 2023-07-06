@@ -251,7 +251,7 @@ sio_power_loop:
 
     // Disable reset on SIO
     ldr r0, =(RESETS_BASE + RESETS_RESET_OFFSET)
-    ldr r1, =(RESETS_RESET_PADS_BANK0_BITS & RESETS_RESET_IO_BANK0_BITS)
+    ldr r1, =(RESETS_RESET_IO_BANK0_BITS)
     ldr r2, [r0]
     bics r2, r2, r1
     str r2, [r0]
