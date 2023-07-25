@@ -72,6 +72,8 @@ void runtime_init(void) {
     reset_block(~(
             RESETS_RESET_IO_QSPI_BITS |
             RESETS_RESET_PADS_QSPI_BITS |
+            RESETS_RESET_IO_BANK0_BITS |
+            RESETS_RESET_PADS_BANK0_BITS |
             RESETS_RESET_PLL_USB_BITS |
             RESETS_RESET_USBCTRL_BITS |
             RESETS_RESET_SYSCFG_BITS |
