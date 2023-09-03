@@ -11,11 +11,6 @@
 #include "hardware/regs/addressmap.h"
 #include "hardware/regs/sio.h"
 #include "pico/binary_info/defs.h"
-#include "hardware/regs/rosc.h"
-#include "hardware/regs/pads_bank0.h"
-#include "hardware/regs/io_bank0.h"
-#include "hardware/regs/psm.h"
-#include "hardware/regs/resets.h"
 
 #ifdef NDEBUG
 #ifndef COLLAPSE_IRQS
@@ -230,62 +225,9 @@ _reset_handler:
     cmp r0, #0
     bne hold_non_core0_in_bootrom
 
-    // Increase ROSC frequency to ~48MHz (range 14.4 - 96)
-    // Startup drops from ~160ms to ~32ms on Pico W MicroPython
-    ldr r0, =(ROSC_BASE + ROSC_DIV_OFFSET)
-    ldr r1, =0xaa2
-    str r1, [r0]
-
-
-    // Enable SIO PSM
-    ldr r0, =(PSM_BASE + PSM_FRCE_ON_OFFSET)
-    ldr r1, =(PSM_FRCE_ON_SIO_BITS)
-    str r1, [r0]
-    ldr r0, =(PSM_BASE + PSM_DONE_OFFSET)
-sio_power_loop:
-    ldr r2, [r0]
-    ands r2, r2, r1
-    cmp r1, r2
-    bne sio_power_loop
-
-
-    // Disable reset on SIO
-    ldr r0, =(RESETS_BASE + RESETS_RESET_OFFSET)
-    ldr r1, =(RESETS_RESET_PADS_BANK0_BITS | RESETS_RESET_IO_BANK0_BITS)
-    ldr r2, [r0]
-    bics r2, r2, r1
-    str r2, [r0]
-    ldr r0, =(RESETS_BASE + RESETS_RESET_DONE_OFFSET)
-sio_reset_loop:
-    ldr r2, [r0]
-    ands r2, r2, r1
-    cmp r1, r2
-    bne sio_reset_loop
-
-
-    // gpio_init(0)
-    ldr r0, =(PADS_BANK0_BASE + PADS_BANK0_GPIO2_OFFSET)
-    ldr r1, [r0]
-    ldr r2, =(PADS_BANK0_GPIO2_OD_BITS)
-    bics r1, r1, r2 // Clear output disable
-    ldr r2, =(PADS_BANK0_GPIO2_IE_BITS)
-    orrs r1, r1, r2
-    str r1, [r0]
-
-    ldr r0, =(IO_BANK0_BASE + IO_BANK0_GPIO2_CTRL_OFFSET)
-    ldr r1, =(0x05) // SIO
-    str r1, [r0]
-
-    // pinMode(0, OUTPUT)
-    ldr r0, =(SIO_BASE + SIO_GPIO_OE_SET_OFFSET)
-    ldr r1, =(1<<2) // Pin 0
-    str r1, [r0]
-
-    // digitalWrite(0, HIGH)
-    ldr r0, =(SIO_BASE + SIO_GPIO_OUT_SET_OFFSET)
-    ldr r1, =(1<<2) // Pin 0
-    str r1, [r0]
-
+    // Provide hook for boards that require access to running code very early
+    ldr r1, =early_variant_init
+    blx r1
 
     // In a NO_FLASH binary, don't perform .data copy, since it's loaded
     // in-place by the SRAM load. Still need to clear .bss
@@ -370,6 +312,13 @@ data_cpy_table:
 .type runtime_init,%function
 .thumb_func
 runtime_init:
+    bx lr
+
+// Provide default for early variant init
+.weak early_variant_init
+.type early_variant_init,%function
+.thumb_func
+early_variant_init:
     bx lr
 
 // ----------------------------------------------------------------------------
